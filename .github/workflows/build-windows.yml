@@ -23,19 +23,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ✅ PowerShell에서도 안전한 1줄 명령
       - name: Build with PyInstaller
-        run: |
-          pyinstaller --noconfirm --onefile --windowed ^
-            --name "JoseonKingUpgrade" ^
-            --add-data "assets;kings_assets" ^
-            main.py
-
-      - name: Fix assets folder inside dist (optional)
-        shell: pwsh
-        run: |
-          # PyInstaller onefile는 실행 시 임시폴더에 풀리므로,
-          # main.py에서 resource_path()로 접근하면 정상 작동함.
-          echo "Build complete."
+        run: pyinstaller --noconfirm --onefile --windowed --name "JoseonKingUpgrade" --add-data "assets;assets" main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
