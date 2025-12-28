@@ -1,6 +1,14 @@
 import os
+import sys
 import random
 import pygame
+
+# =========================
+# PyInstaller 대응: assets 경로 처리
+# =========================
+def resource_path(*parts):
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, *parts)
 
 # =========================
 # 기본 설정
@@ -12,7 +20,6 @@ try:
 except:
     SOUND_OK = False
 
-# ✅ 화면 크기 키움
 W, H = 1280, 720
 screen = pygame.display.set_mode((W, H))
 pygame.display.set_caption("조선 왕 강화하기")
@@ -42,16 +49,21 @@ KINGS = [
 ]
 
 # =========================
+# 밸런스(원하면 여기만 조절)
+# =========================
+START_MONEY = 500_000
+BASE_COST = 500
+
+# 판매가: (강화비용 * SELL_MULT) + (레벨 * SELL_LV_BONUS)
+SELL_MULT = 0.90
+SELL_LV_BONUS = 1000
+
+# =========================
 # 상태
 # =========================
 king_i = 0
 plus_level = 0
-
-# ✅ 초반 돈 줄임
-START_MONEY = 500_000
 money = START_MONEY
-
-BASE_COST = 500
 
 face_mark = None
 face_mark_timer = 0.0
@@ -59,7 +71,6 @@ face_mark_timer = 0.0
 popup_text = ""
 popup_timer = 0.0
 
-# ✅ 엔딩(게임 상태)
 game_state = "play"   # "play" or "ending"
 ending_lines = []
 
@@ -77,32 +88,37 @@ def cost_now():
     return int(BASE_COST * (1.18 ** plus_level))
 
 # =========================
-# 확률 규칙
+# 확률 규칙(정수 %로 안정화)
 # =========================
-def success_rate(lv):
+def success_rate(lv: int) -> int:
     if lv <= 2:
         return 100
     return max(10, 100 - (lv - 2) * 5)
 
-def down_rate(lv):
+def down_rate(lv: int) -> int:
+    # +5부터 하락 시작, 최대 15%
     if lv < 5:
         return 0
-    return min(15, (lv - 4) * 0.75)  # +5=3%
+    # 기존 너 코드 느낌 유지: (lv-4)*3% 를 15% 상한
+    return min(15, int((lv - 4) * 3))
 
-def break_rate(lv):
+def break_rate(lv: int) -> int:
+    # +10부터 파괴 시작, 최대 5%
     if lv < 10:
         return 0
-    return min(5, (lv - 9) * 0.5)         # +10=1%
+    # 기존 너 코드 느낌 유지: +10=1%, +11=2% ... 최대 5%
+    return min(5, int(lv - 9))
 
-# ✅ 판매가(더 높게)
-def sell_price(lv):
-    return int(cost_now() * 15.00 + lv * 2000)
+def sell_price(lv: int) -> int:
+    return int(cost_now() * SELL_MULT + lv * SELL_LV_BONUS)
 
 # =========================
-# 이미지 로드 (assets/kings/1.png ...)
+# assets 로드
 # =========================
-ASSET_DIR = os.path.join(os.path.dirname(__file__), "assets")
+ASSET_DIR = resource_path("assets")
 KING_DIR = os.path.join(ASSET_DIR, "kings")
+SOUND_DIR = os.path.join(ASSET_DIR, "sounds")
+
 FACE_SIZE = (260, 320)
 
 def load_face(path):
@@ -129,17 +145,17 @@ for i, name in enumerate(KINGS, start=1):
         FACES[i] = face_placeholder(name)
 
 # =========================
-# 효과음 (볼륨 60% 감소 = 0.4)
+# 효과음
 # =========================
 snd_down = snd_break = None
 if SOUND_OK:
     try:
-        snd_down = pygame.mixer.Sound(os.path.join(ASSET_DIR, "sounds/down.wav"))
+        snd_down = pygame.mixer.Sound(os.path.join(SOUND_DIR, "down.wav"))
         snd_down.set_volume(0.4)
     except:
         pass
     try:
-        snd_break = pygame.mixer.Sound(os.path.join(ASSET_DIR, "sounds/break.wav"))
+        snd_break = pygame.mixer.Sound(os.path.join(SOUND_DIR, "break.wav"))
         snd_break.set_volume(0.4)
     except:
         pass
@@ -220,12 +236,12 @@ def do_upgrade():
 
         set_popup("성공!", 1.1)
 
-        # ✅ 엔딩 조건: 순종 도달 + 최종 강화(+27) 달성
+        # 엔딩 조건: 순종 도달 + 최종 강화(+27) 달성
         if king_i == len(KINGS) - 1 and plus_level >= len(KINGS):
             start_ending()
         return
 
-    # 실패: 파괴/하락/유지(돈만 나감)
+    # 실패
     r = random.randint(1, 100)
 
     if b > 0 and r <= b:
@@ -250,7 +266,7 @@ def do_upgrade():
 def do_sell():
     global money
 
-    # ✅ 0강일 때 판매 불가
+    # 0강 판매 불가
     if plus_level == 0:
         set_popup("0강은 판매 불가!", 1.2)
         return
@@ -267,7 +283,6 @@ running = True
 while running:
     dt = clock.tick(60) / 1000.0
 
-    # 타이머 감소
     if popup_timer > 0:
         popup_timer = max(0.0, popup_timer - dt)
     if face_mark_timer > 0:
@@ -279,7 +294,7 @@ while running:
         if e.type == pygame.QUIT:
             running = False
 
-        # ✅ 엔딩 화면 입력
+        # 엔딩 화면 입력
         if game_state == "ending":
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_RETURN:
@@ -288,7 +303,7 @@ while running:
                     running = False
             continue
 
-        # ✅ 플레이 상태 입력
+        # 플레이 입력
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
             if FACE_RECT.collidepoint(e.pos) or BTN_UP.collidepoint(e.pos):
                 do_upgrade()
@@ -300,44 +315,35 @@ while running:
     # -------------------------
     screen.fill(WHITE)
 
-    # 제목
     title = FONT_T.render("조선 왕 강화하기", True, (200, 0, 0))
     screen.blit(title, (W//2 - title.get_width()//2, 35))
 
-    # 왼쪽 정보
     screen.blit(FONT_M.render(f"강화비용: {cost_now()}원", True, BLACK), (LEFT_X, 100))
     sell_text = "판매가격: (0강 판매 불가)" if plus_level == 0 else f"판매가격: {sell_price(plus_level)}원"
     screen.blit(FONT_M.render(sell_text, True, BLACK), (LEFT_X, 135))
 
-    # 왕 얼굴
     pygame.draw.rect(screen, (250, 250, 250), FACE_RECT.inflate(18, 18), border_radius=20)
     pygame.draw.rect(screen, BLACK, FACE_RECT.inflate(18, 18), 2, border_radius=20)
     screen.blit(FACES[king_i + 1], FACE_RECT.topleft)
 
-    # 하락/파괴 시 빨간 X 표시
     if face_mark == "X":
         x1, y1 = FACE_RECT.left + 20, FACE_RECT.top + 25
         x2, y2 = FACE_RECT.right - 20, FACE_RECT.bottom - 25
         pygame.draw.line(screen, RED, (x1, y1), (x2, y2), 12)
         pygame.draw.line(screen, RED, (x1, y2), (x2, y1), 12)
 
-    # 메인 표기
     main = FONT_L.render(f"+{plus_level}  {KINGS[king_i]}", True, BLACK)
     screen.blit(main, (LEFT_X, 500))
 
-    # 성공률
     s = success_rate(plus_level)
     screen.blit(FONT_M.render(f"성공률 {s}%", True, BLACK), (LEFT_X, 550))
 
-    # 버튼
     draw_btn(BTN_UP, "강화하기", enabled=True)
     draw_btn(BTN_SELL, "판매하기", enabled=(plus_level > 0))
 
-    # 돈
     money_surf = FONT_M.render(f"돈: {money}원", True, BLACK)
     screen.blit(money_surf, (LEFT_X, 690))
 
-    # 오른쪽 패널
     right = pygame.Rect(RIGHT_X, 130, RIGHT_W, 540)
     pygame.draw.rect(screen, PANEL, right, border_radius=18)
     pygame.draw.rect(screen, BLACK, right, 2, border_radius=18)
@@ -348,7 +354,6 @@ while running:
     bsurf = FONT_M.render(f"파괴 {b}%", True, BLACK)
     screen.blit(bsurf, (RIGHT_X + RIGHT_W - 30 - bsurf.get_width(), 155))
 
-    # 가운데 결과 팝업
     if popup_timer > 0 and popup_text:
         box = pygame.Rect(RIGHT_X + 40, 270, RIGHT_W - 80, 170)
         pygame.draw.rect(screen, WHITE, box, border_radius=18)
@@ -357,7 +362,6 @@ while running:
         t = FONT_POP.render(popup_text, True, RED)
         screen.blit(t, (box.centerx - t.get_width()//2, box.centery - t.get_height()//2))
 
-    # ✅ 엔딩 화면 오버레이
     if game_state == "ending":
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
