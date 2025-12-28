@@ -1,0 +1,44 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onefile --windowed ^
+            --name "JoseonKingUpgrade" ^
+            --add-data "assets;kings_assets" ^
+            main.py
+
+      - name: Fix assets folder inside dist (optional)
+        shell: pwsh
+        run: |
+          # PyInstaller onefile는 실행 시 임시폴더에 풀리므로,
+          # main.py에서 resource_path()로 접근하면 정상 작동함.
+          echo "Build complete."
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JoseonKingUpgrade-windows
+          path: dist/JoseonKingUpgrade.exe
